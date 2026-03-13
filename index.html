@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Virtual Threads — Java 21+</title>
+
+  <!-- Reveal.js 4.6.0 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/theme/dracula.css" />
+  <!-- highlight.js monokai -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/highlight/monokai.css" />
+
+  <style>
+    /* ── Global tweaks ── */
+    .reveal { font-size: 22px; }
+    .reveal h1 { font-size: 2.4em; }
+    .reveal h2 { font-size: 1.7em; color: #bd93f9; }
+    .reveal h3 { font-size: 1.3em; color: #8be9fd; }
+    .reveal pre code { max-height: 480px; font-size: 0.82em; }
+    .reveal .slides section { padding: 10px 30px; }
+
+    /* ── Title slide animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 10px #bd93f9, 0 0 20px #bd93f9; }
+      50%       { text-shadow: 0 0 25px #ff79c6, 0 0 50px #ff79c6; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-8px); }
+    }
+    .title-main {
+      animation: fadeUp 0.8s ease both, glow 3s ease-in-out 0.8s infinite;
+      color: #bd93f9;
+    }
+    .title-sub {
+      animation: fadeUp 0.8s ease 0.3s both;
+      color: #8be9fd;
+    }
+    .title-badge {
+      animation: fadeUp 0.8s ease 0.6s both, float 3s ease-in-out 1.4s infinite;
+      display: inline-block;
+      background: linear-gradient(135deg, #bd93f9, #ff79c6);
+      color: #282a36;
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 0.9em;
+      margin: 4px;
+    }
+    .title-meta {
+      animation: fadeUp 0.8s ease 0.9s both;
+      color: #6272a4;
+      font-size: 0.85em;
+      margin-top: 14px;
+    }
+
+    /* ── Stat boxes ── */
+    .stat-row { display: flex; gap: 20px; justify-content: center; margin: 20px 0; }
+    .stat-box {
+      background: #44475a;
+      border: 2px solid #bd93f9;
+      border-radius: 12px;
+      padding: 18px 28px;
+      text-align: center;
+      flex: 1;
+    }
+    .stat-box .num { font-size: 2.2em; font-weight: bold; color: #ff5555; }
+    .stat-box .lbl { color: #f8f8f2; font-size: 0.85em; margin-top: 4px; }
+
+    /* ── Agenda list ── */
+    .agenda-list { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .agenda-list li {
+      background: #44475a;
+      border-left: 4px solid #bd93f9;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 0.9em;
+    }
+    .agenda-list li .sec { color: #bd93f9; font-weight: bold; margin-right: 6px; }
+
+    /* ── Generic cards ── */
+    .cards { display: flex; gap: 16px; margin: 16px 0; }
+    .card {
+      background: #44475a;
+      border-radius: 10px;
+      padding: 16px;
+      flex: 1;
+      border-top: 3px solid #bd93f9;
+    }
+    .card.green  { border-top-color: #50fa7b; }
+    .card.yellow { border-top-color: #f1fa8c; }
+    .card.red    { border-top-color: #ff5555; }
+    .card.cyan   { border-top-color: #8be9fd; }
+    .card h4 { margin: 0 0 8px; color: #f8f8f2; font-size: 1em; }
+    .card p, .card li { font-size: 0.82em; color: #f8f8f2; margin: 3px 0; }
+    .card ul { padding-left: 16px; margin: 4px 0; }
+
+    /* ── Migration checklist ── */
+    .checklist { list-style: none; padding: 0; }
+    .checklist li {
+      background: #44475a;
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin: 8px 0;
+      border-left: 4px solid #50fa7b;
+      font-size: 0.88em;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .checklist li .chk { color: #50fa7b; font-size: 1.1em; flex-shrink: 0; }
+    .checklist li .warn { border-left-color: #ffb86c; }
+    .checklist li code { background: #282a36; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+
+    /* ── Two-column layout ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+    .two-col-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; }
+
+    /* ── Highlight tags ── */
+    .tag {
+      display: inline-block;
+      background: #bd93f9;
+      color: #282a36;
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 0.78em;
+      font-weight: bold;
+      margin: 2px;
+    }
+    .tag.green  { background: #50fa7b; }
+    .tag.red    { background: #ff5555; }
+    .tag.yellow { background: #f1fa8c; }
+    .tag.cyan   { background: #8be9fd; }
+
+    /* ── Note box ── */
+    .note-box {
+      background: #44475a;
+      border: 1px solid #6272a4;
+      border-left: 4px solid #f1fa8c;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.82em;
+      color: #f1fa8c;
+      margin-top: 14px;
+    }
+
+    /* ── Summary boxes ── */
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+    .summary-item {
+      background: #44475a;
+      border-radius: 10px;
+      padding: 14px;
+      border-top: 3px solid #bd93f9;
+      text-align: center;
+    }
+    .summary-item .icon { font-size: 2em; }
+    .summary-item h4 { color: #bd93f9; margin: 8px 0 4px; font-size: 0.9em; }
+    .summary-item p { color: #f8f8f2; font-size: 0.75em; margin: 0; }
+
+    /* ── QA slide ── */
+    .qa-big {
+      font-size: 5em;
+      animation: float 3s ease-in-out infinite;
+      display: inline-block;
+    }
+
+    /* ════════════════════════════════════════════
+       §2 ANIMATED ARCHITECTURE DIAGRAM
+       ════════════════════════════════════════════ */
+    #slide-arch .arch-container {
+      display: flex;
+      gap: 30px;
+      justify-content: center;
+      align-items: flex-start;
+      margin: 10px 0;
+    }
+    #slide-arch .arch-side {
+      flex: 1;
+      background: #282a36;
+      border-radius: 12px;
+      padding: 16px;
+      border: 2px solid #44475a;
+      min-height: 340px;
+      position: relative;
+    }
+    #slide-arch .arch-side.active-side {
+      border-color: #bd93f9;
+      box-shadow: 0 0 20px rgba(189,147,249,0.3);
+    }
+    #slide-arch .arch-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 0.88em;
+      margin-bottom: 12px;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+    #slide-arch .arch-title.pt-title { background: #ff555533; color: #ff5555; }
+    #slide-arch .arch-title.vt-title { background: #bd93f933; color: #bd93f9; }
+
+    /* OS / Scheduler labels */
+    #slide-arch .os-bar {
+      background: #44475a;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 0.72em;
+      color: #6272a4;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    /* Platform Thread boxes */
+    #slide-arch .ada-pt-thread {
+      background: #ff555522;
+      border: 1px solid #ff5555;
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin: 4px 0;
+      font-size: 0.72em;
+      color: #ff5555;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.4s ease;
+    }
+    #slide-arch .ada-pt-thread.busy {
+      background: #ff555544;
+      border-color: #ff79c6;
+      color: #ff79c6;
+    }
+    #slide-arch .ada-pt-thread.idle {
+      background: #44475a44;
+      border-color: #6272a4;
+      color: #6272a4;
+    }
+    #slide-arch .thread-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ff5555;
+      flex-shrink: 0;
+      transition: background 0.4s;
+    }
+    #slide-arch .ada-pt-thread.busy .thread-dot  { background: #ff79c6; animation: pulse-dot 1s infinite; }
+    #slide-arch .ada-pt-thread.idle .thread-dot  { background: #6272a4; }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.4); opacity: 0.7; }
+    }
+
+    /* Virtual thread pills */
+    #slide-arch .ada-vt-pool {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 6px 0;
+    }
+    #slide-arch .ada-vt-pill {
+      border-radius: 10px;
+      padding: 3px 9px;
+      font-size: 0.65em;
+      font-weight: bold;
+      transition: all 0.4s ease;
+      border: 1px solid transparent;
+    }
+    #slide-arch .ada-vt-pill.vt-running {
+      background: #50fa7b33;
+      border-color: #50fa7b;
+      color: #50fa7b;
+    }
+    #slide-arch .ada-vt-pill.vt-waiting {
+      background: #f1fa8c22;
+      border-color: #f1fa8c;
+      color: #f1fa8c;
+    }
+    #slide-arch .ada-vt-pill.vt-heap {
+      background: #8be9fd22;
+      border-color: #8be9fd;
+      color: #8be9fd;
+    }
+
+    /* Carrier row */
+    #slide-arch .ada-carrier-row {
+      display: flex;
+      gap: 6px;
+      margin: 8px 0 4px;
+    }
+    #slide-arch .ada-carrier {
+      flex: 1;
+      background: #44475a;
+      border: 1px solid #6272a4;
+      border-radius: 6px;
+      padding: 5px 6px;
+      font-size: 0.68em;
+      text-align: center;
+      color: #6272a4;
+      transition: all 0.4s ease;
+      min-height: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+    }
+    #slide-arch .ada-carrier.carrying {
+      background: #bd93f922;
+      border-color: #bd93f9;
+      color: #bd93f9;
+    }
+    #slide-arch .ada-carrier.free {
+      background: #50fa7b11;
+      border-color: #50fa7b;
+      color: #50fa7b;
+    }
+    #slide-arch .carrier-label { font-size: 0.85em; }
+    #slide-arch .carrier-vt-label { font-size: 0.75em; color: #ff79c6; }
+
+    /* Heap section */
+    #slide-arch .ada-heap-section {
+      background: #8be9fd11;
+      border: 1px dashed #8be9fd44;
+      border-radius: 6px;
+      padding: 6px 8px;
+      margin-top: 8px;
+    }
+    #slide-arch .heap-label {
+      font-size: 0.65em;
+      color: #8be9fd;
+      margin-bottom: 4px;
+    }
+
+    /* Stats bar */
+    #slide-arch .arch-stats {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 12px;
+      padding: 10px;
+      background: #282a36;
+      border-radius: 8px;
+      border: 1px solid #44475a;
+    }
+    #slide-arch .arch-stat-item { text-align: center; }
+    #slide-arch .arch-stat-num {
+      font-size: 1.4em;
+      font-weight: bold;
+      color: #bd93f9;
+      transition: all 0.4s ease;
+    }
+    #slide-arch .arch-stat-num.red   { color: #ff5555; }
+    #slide-arch .arch-stat-num.green { color: #50fa7b; }
+    #slide-arch .arch-stat-lbl { font-size: 0.65em; color: #6272a4; margin-top: 2px; }
+
+    /* Animation status */
+    #slide-arch .anim-status {
+      text-align: center;
+      font-size: 0.72em;
+      color: #6272a4;
+      margin-top: 8px;
+      min-height: 1.2em;
+    }
+    #slide-arch .anim-status.highlight { color: #f1fa8c; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <div style="padding: 20px 0;">
+    <h1 class="title-main">Virtual Threads</h1>
+    <h2 class="title-sub" style="margin-top: 0;">Java 21+ / Project Loom</h2>
+    <div style="margin: 20px 0;">
+      <span class="title-badge">JEP 444</span>
+      <span class="title-badge">JEP 453</span>
+      <span class="title-badge">JEP 446</span>
+    </div>
+    <p class="title-meta">
+      Уровень: Middle / Senior &nbsp;·&nbsp; ~3–4 часа<br/>
+      Предварительные требования: Java 11+, многопоточность, Executor Framework
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 2 — AGENDA
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>Программа урока</h2>
+  <ul class="agenda-list">
+    <li class="fragment"><span class="sec">§1</span> Проблема платформенных потоков</li>
+    <li class="fragment"><span class="sec">§2</span> Архитектура Virtual Threads</li>
+    <li class="fragment"><span class="sec">§3</span> Continuation &amp; Mount/Unmount</li>
+    <li class="fragment"><span class="sec">§4</span> API: создание и управление</li>
+    <li class="fragment"><span class="sec">§5</span> Антипаттерны: Pinning</li>
+    <li class="fragment"><span class="sec">§6</span> ThreadLocal vs ScopedValue</li>
+    <li class="fragment"><span class="sec">§7</span> Structured Concurrency</li>
+    <li class="fragment"><span class="sec">§8</span> Производительность</li>
+    <li class="fragment"><span class="sec">§9</span> Миграция кода</li>
+    <li class="fragment"><span class="sec">§10</span> Отладка и инструментарий</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 3 — JAVA CONCURRENCY TIMELINE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>История многопоточности в Java</h2>
+  <svg viewBox="0 0 860 200" width="100%" style="max-height:200px;">
+    <defs>
+      <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#6272a4"/>
+      </marker>
+    </defs>
+    <!-- Timeline line -->
+    <line x1="40" y1="100" x2="820" y2="100" stroke="#6272a4" stroke-width="3" marker-end="url(#arr)"/>
+    <!-- Milestones -->
+    <!-- Java 1.0 -->
+    <circle cx="80"  cy="100" r="12" fill="#ff5555"/>
+    <text x="80"  y="85"  text-anchor="middle" fill="#ff5555"  font-size="13" font-weight="bold">Java 1.0</text>
+    <text x="80"  y="128" text-anchor="middle" fill="#f8f8f2"  font-size="11">Thread</text>
+    <text x="80"  y="142" text-anchor="middle" fill="#f8f8f2"  font-size="11">API</text>
+    <!-- Java 5 -->
+    <circle cx="240" cy="100" r="12" fill="#ffb86c"/>
+    <text x="240" y="85"  text-anchor="middle" fill="#ffb86c"  font-size="13" font-weight="bold">Java 5</text>
+    <text x="240" y="128" text-anchor="middle" fill="#f8f8f2"  font-size="11">Executor</text>
+    <text x="240" y="142" text-anchor="middle" fill="#f8f8f2"  font-size="11">Framework</text>
+    <!-- Java 7 -->
+    <circle cx="400" cy="100" r="12" fill="#f1fa8c"/>
+    <text x="400" y="85"  text-anchor="middle" fill="#f1fa8c"  font-size="13" font-weight="bold">Java 7</text>
+    <text x="400" y="128" text-anchor="middle" fill="#f8f8f2"  font-size="11">Fork/Join</text>
+    <text x="400" y="142" text-anchor="middle" fill="#f8f8f2"  font-size="11">Pool</text>
+    <!-- Java 8 -->
+    <circle cx="540" cy="100" r="12" fill="#50fa7b"/>
+    <text x="540" y="85"  text-anchor="middle" fill="#50fa7b"  font-size="13" font-weight="bold">Java 8</text>
+    <text x="540" y="128" text-anchor="middle" fill="#f8f8f2"  font-size="11">CompletableFuture</text>
+    <text x="540" y="142" text-anchor="middle" fill="#f8f8f2"  font-size="11">Streams</text>
+    <!-- Java 9 -->
+    <circle cx="670" cy="100" r="12" fill="#8be9fd"/>
+    <text x="670" y="85"  text-anchor="middle" fill="#8be9fd"  font-size="13" font-weight="bold">Java 9</text>
+    <text x="670" y="128" text-anchor="middle" fill="#f8f8f2"  font-size="11">Reactive</text>
+    <text x="670" y="142" text-anchor="middle" fill="#f8f8f2"  font-size="11">Streams</text>
+    <!-- Java 21 -->
+    <circle cx="800" cy="100" r="16" fill="#bd93f9"/>
+    <text x="800" y="82"  text-anchor="middle" fill="#bd93f9"  font-size="13" font-weight="bold">Java 21</text>
+    <text x="800" y="128" text-anchor="middle" fill="#ff79c6"  font-size="12" font-weight="bold">Virtual</text>
+    <text x="800" y="143" text-anchor="middle" fill="#ff79c6"  font-size="12" font-weight="bold">Threads!</text>
+  </svg>
+  <div class="note-box" style="margin-top:10px;">
+    Project Loom разрабатывался ~6 лет. Virtual Threads стали финальной фичей в Java 21 (сентябрь 2023).
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 4 — §1 PROBLEM: STATS
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§1 — Проблема: платформенные потоки</h2>
+  <div class="stat-row">
+    <div class="stat-box">
+      <div class="num">~1 MB</div>
+      <div class="lbl">стек каждого потока (зарезервировано ОС)</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">~1 ms</div>
+      <div class="lbl">время создания потока</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">~10K</div>
+      <div class="lbl">практический предел потоков на JVM</div>
+    </div>
+  </div>
+  <div class="cards" style="margin-top:16px;">
+    <div class="card red">
+      <h4>Thread-per-Request</h4>
+      <ul>
+        <li>Классическая модель серверов</li>
+        <li>1 запрос = 1 OS thread</li>
+        <li>При 10K RPS нужно 10K потоков</li>
+        <li>→ OOM или деградация</li>
+      </ul>
+    </div>
+    <div class="card yellow">
+      <h4>Попытки решения</h4>
+      <ul>
+        <li>Callback Hell (Async IO)</li>
+        <li>Reactive Programming</li>
+        <li>Сложный код, трудная отладка</li>
+        <li>→ разрыв со стандартным Java</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h4>Little's Law</h4>
+      <ul>
+        <li>L = λ · W</li>
+        <li>При W=100ms, λ=1000 RPS</li>
+        <li>→ L = 100 потоков занято</li>
+        <li>Больше потоков = больше масштаб</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 5 — §1 CODE DEMO
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§1 — Демонстрация предела потоков</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// Сколько platform threads может создать JVM?
+try {
+    List&lt;Thread&gt; threads = new ArrayList&lt;&gt;();
+    for (int i = 0; i &lt; 10_000; i++) {
+        Thread t = new Thread(() -&gt; {
+            try {
+                Thread.sleep(10_000); // каждый поток ждёт 10 сек
+            } catch (InterruptedException e) {}
+        });
+        t.start();
+        threads.add(t);
+    }
+    System.out.println("Создано потоков: " + threads.size());
+} catch (OutOfMemoryError e) {
+    System.err.println("OOM при создании потока: " + e.getMessage());
+}
+
+// С Virtual Threads — без проблем:
+for (int i = 0; i &lt; 1_000_000; i++) {
+    Thread.ofVirtual().start(() -&gt; {
+        try {
+            Thread.sleep(10_000);
+        } catch (InterruptedException e) {}
+    });
+}
+System.out.println("1 миллион VT запущен успешно!");
+  </code></pre>
+  <div class="note-box">
+    Virtual Threads: стек в heap, начинается с ~200–300 байт. Миллион потоков = ~200 MB heap.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 6 — §2 ARCHITECTURE — ANIMATED
+     ═══════════════════════════════════════════════════════ -->
+<section id="slide-arch">
+  <h2>§2 — Архитектура: Platform vs Virtual Threads</h2>
+  <div class="arch-container">
+
+    <!-- LEFT: Platform Threads -->
+    <div class="arch-side" id="ada-pt-side">
+      <div class="arch-title pt-title">Platform Threads (OS-bound)</div>
+      <div class="os-bar">OS Scheduler (preemptive)</div>
+      <div id="ada-pt-threads">
+        <div class="ada-pt-thread" id="ada-pt-0"><span class="thread-dot"></span><span>PT-1: idle</span></div>
+        <div class="ada-pt-thread" id="ada-pt-1"><span class="thread-dot"></span><span>PT-2: idle</span></div>
+        <div class="ada-pt-thread" id="ada-pt-2"><span class="thread-dot"></span><span>PT-3: idle</span></div>
+        <div class="ada-pt-thread" id="ada-pt-3"><span class="thread-dot"></span><span>PT-4: idle</span></div>
+      </div>
+      <div style="margin-top:10px; font-size:0.7em; color:#6272a4;">
+        ~1 MB stack / thread (OS reserved)
+      </div>
+    </div>
+
+    <!-- RIGHT: Virtual Threads -->
+    <div class="arch-side" id="ada-vt-side">
+      <div class="arch-title vt-title">Virtual Threads (JVM-managed)</div>
+      <div class="os-bar">Work-Stealing ForkJoinPool</div>
+
+      <!-- Carrier threads -->
+      <div class="ada-carrier-row" id="ada-carriers">
+        <div class="ada-carrier free" id="ada-carrier-0">
+          <span class="carrier-label">Carrier-1</span>
+          <span class="carrier-vt-label" id="ada-cv-0">free</span>
+        </div>
+        <div class="ada-carrier free" id="ada-carrier-1">
+          <span class="carrier-label">Carrier-2</span>
+          <span class="carrier-vt-label" id="ada-cv-1">free</span>
+        </div>
+        <div class="ada-carrier free" id="ada-carrier-2">
+          <span class="carrier-label">Carrier-3</span>
+          <span class="carrier-vt-label" id="ada-cv-2">free</span>
+        </div>
+      </div>
+
+      <!-- Virtual thread pills: running -->
+      <div style="font-size:0.65em; color:#50fa7b; margin: 8px 0 3px;">Running (mounted):</div>
+      <div class="ada-vt-pool" id="ada-vt-running"></div>
+
+      <!-- Virtual thread pills: waiting (unmounted) -->
+      <div class="ada-heap-section">
+        <div class="heap-label">Heap — Unmounted (waiting for I/O):</div>
+        <div class="ada-vt-pool" id="ada-vt-heap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="arch-stats">
+    <div class="arch-stat-item">
+      <div class="arch-stat-num red" id="ada-stat-pt">4</div>
+      <div class="arch-stat-lbl">Platform Threads (OS)</div>
+    </div>
+    <div class="arch-stat-item">
+      <div class="arch-stat-num green" id="ada-stat-vt">0</div>
+      <div class="arch-stat-lbl">Virtual Threads total</div>
+    </div>
+    <div class="arch-stat-item">
+      <div class="arch-stat-num" id="ada-stat-running">0</div>
+      <div class="arch-stat-lbl">Running (mounted)</div>
+    </div>
+    <div class="arch-stat-item">
+      <div class="arch-stat-num" style="color:#f1fa8c;" id="ada-stat-waiting">0</div>
+      <div class="arch-stat-lbl">Waiting in heap</div>
+    </div>
+  </div>
+  <div class="anim-status" id="ada-anim-status">Initialising animation…</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 7 — §2 API CODE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§2 — API: Thread.ofVirtual()</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// Проверка типа потока
+Thread vt = Thread.ofVirtual().start(() -&gt; {
+    System.out.println("isVirtual : " + Thread.currentThread().isVirtual()); // true
+    System.out.println("isDaemon  : " + Thread.currentThread().isDaemon());  // true
+    System.out.println("priority  : " + Thread.currentThread().getPriority()); // 5 (NORM)
+});
+
+Thread pt = Thread.ofPlatform().start(() -&gt; {
+    System.out.println("isVirtual : " + Thread.currentThread().isVirtual()); // false
+});
+
+vt.join();
+pt.join();
+
+// Именованные VT для отладки
+Thread named = Thread.ofVirtual()
+    .name("order-handler-", 0)   // порядковые имена: order-handler-0, -1, ...
+    .start(() -&gt; processOrder());
+
+// ExecutorService (рекомендуемый способ в production)
+try (ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor()) {
+    exec.submit(() -&gt; handleRequest(req));
+}
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 8 — §3 MOUNT/UNMOUNT LIFECYCLE SVG
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§3 — Lifecycle: Mount / Unmount</h2>
+  <svg viewBox="0 0 860 260" width="100%" style="max-height:260px;">
+    <defs>
+      <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#bd93f9"/>
+      </marker>
+      <marker id="arr3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#f1fa8c"/>
+      </marker>
+    </defs>
+    <!-- State boxes -->
+    <!-- NEW -->
+    <rect x="20"  y="100" width="110" height="50" rx="8" fill="#44475a" stroke="#6272a4" stroke-width="1.5"/>
+    <text x="75"  y="130" text-anchor="middle" fill="#f8f8f2" font-size="14" font-weight="bold">NEW</text>
+    <!-- RUNNABLE -->
+    <rect x="180" y="100" width="120" height="50" rx="8" fill="#50fa7b33" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="240" y="130" text-anchor="middle" fill="#50fa7b" font-size="14" font-weight="bold">RUNNABLE</text>
+    <!-- RUNNING (mounted) -->
+    <rect x="355" y="75"  width="150" height="55" rx="8" fill="#bd93f933" stroke="#bd93f9" stroke-width="2"/>
+    <text x="430" y="100" text-anchor="middle" fill="#bd93f9" font-size="13" font-weight="bold">RUNNING</text>
+    <text x="430" y="118" text-anchor="middle" fill="#bd93f9" font-size="11">(mounted)</text>
+    <!-- BLOCKED/WAITING (unmounted) -->
+    <rect x="355" y="165" width="150" height="55" rx="8" fill="#f1fa8c22" stroke="#f1fa8c" stroke-width="1.5"/>
+    <text x="430" y="190" text-anchor="middle" fill="#f1fa8c" font-size="13" font-weight="bold">WAITING</text>
+    <text x="430" y="208" text-anchor="middle" fill="#f1fa8c" font-size="11">(unmounted)</text>
+    <!-- TERMINATED -->
+    <rect x="590" y="100" width="130" height="50" rx="8" fill="#ff555533" stroke="#ff5555" stroke-width="1.5"/>
+    <text x="655" y="130" text-anchor="middle" fill="#ff5555" font-size="14" font-weight="bold">TERMINATED</text>
+
+    <!-- Arrows -->
+    <!-- NEW → RUNNABLE -->
+    <line x1="130" y1="125" x2="177" y2="125" stroke="#bd93f9" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="154" y="118" text-anchor="middle" fill="#bd93f9" font-size="10">start()</text>
+    <!-- RUNNABLE → RUNNING -->
+    <line x1="300" y1="115" x2="352" y2="102" stroke="#bd93f9" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="325" y="104" text-anchor="middle" fill="#bd93f9" font-size="10">mount</text>
+    <!-- RUNNING → WAITING -->
+    <line x1="430" y1="130" x2="430" y2="163" stroke="#f1fa8c" stroke-width="2" marker-end="url(#arr3)"/>
+    <text x="450" y="150" fill="#f1fa8c" font-size="10">I/O block</text>
+    <!-- WAITING → RUNNABLE -->
+    <path d="M355,192 Q260,230 300,135" fill="none" stroke="#f1fa8c" stroke-width="2" marker-end="url(#arr3)" stroke-dasharray="5,3"/>
+    <text x="270" y="216" fill="#f1fa8c" font-size="10">I/O done → remount</text>
+    <!-- RUNNING → TERMINATED -->
+    <line x1="505" y1="105" x2="588" y2="118" stroke="#bd93f9" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="548" y="107" text-anchor="middle" fill="#bd93f9" font-size="10">finish</text>
+
+    <!-- Carrier thread region -->
+    <rect x="330" y="60" width="200" height="180" rx="10" fill="none" stroke="#44475a" stroke-width="1" stroke-dasharray="6,3"/>
+    <text x="430" y="55" text-anchor="middle" fill="#6272a4" font-size="11">Carrier Thread (OS)</text>
+
+    <!-- Heap region -->
+    <rect x="340" y="155" width="160" height="80" rx="6" fill="none" stroke="#8be9fd44" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="500" y="170" fill="#8be9fd" font-size="10">stack saved in Heap</text>
+  </svg>
+  <div class="note-box" style="margin-top:8px;">
+    При блокирующей операции carrier thread освобождается и берёт другой виртуальный поток. Стек сохраняется в heap как Continuation.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 9 — §3 CONTINUATION CODE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§3 — Continuation: код и поведение</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// Что происходит при вызове блокирующего метода в VT:
+void handleRequest(HttpRequest req) {
+    // 1. VT mounted на carrier thread
+    String data = fetchFromDB(req.id());   // ← блокирующий вызов
+    // ↑ JVM: unmount VT, сохранить стек в heap, carrier thread свободен
+    // ... carrier thread выполняет другие VT ...
+    // I/O завершился: JVM remount этот VT на (возможно другой) carrier
+    // 2. VT продолжает выполнение со следующей строки
+    process(data);
+}
+
+// Планировщик — ForkJoinPool (work-stealing):
+// По умолчанию размер = Runtime.getRuntime().availableProcessors()
+// Можно настроить:
+System.setProperty("jdk.virtualThreadScheduler.parallelism", "8");
+System.setProperty("jdk.virtualThreadScheduler.maxPoolSize", "256");
+
+// Continuation — внутренняя JVM-абстракция:
+// публичного API нет, но идея: сохраняем точку возврата + локальные переменные
+// при unmount, восстанавливаем при remount
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 10 — §4 API: 4 WAYS
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§4 — Четыре способа создать Virtual Thread</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// 1. Thread.ofVirtual() — прямое создание
+Thread vt1 = Thread.ofVirtual().start(() -&gt; task());
+
+// 2. Thread.startVirtualThread() — shortcut
+Thread vt2 = Thread.startVirtualThread(() -&gt; task());
+
+// 3. ExecutorService (рекомендован для production)
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    Future&lt;String&gt; f = executor.submit(() -&gt; callService());
+    String result = f.get();
+}
+
+// 4. StructuredTaskScope (Java 21, для связанных задач)
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var t1 = scope.fork(() -&gt; fetchUser(id));
+    var t2 = scope.fork(() -&gt; fetchOrders(id));
+    scope.join().throwIfFailed();
+    return new UserWithOrders(t1.get(), t2.get());
+}
+
+// ⚠️ АНТИПАТТЕРН: НЕ оборачивать VT в пул!
+// Executors.newFixedThreadPool(100) с VT внутри — бессмысленно
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 11 — §4 THREADFACTORY
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§4 — ThreadFactory и именование</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// ThreadFactory для интеграции с фреймворками
+ThreadFactory factory = Thread.ofVirtual()
+    .name("req-handler-", 0)    // req-handler-0, req-handler-1, ...
+    .factory();
+
+// Использование с ExecutorService
+ExecutorService executor = Executors.newThreadPerTaskExecutor(factory);
+
+// Spring Boot 3.2+: одна строка конфигурации
+// application.properties:
+// spring.threads.virtual.enabled=true
+
+// Tomcat / Jetty тоже поддерживают VT:
+// TomcatProtocolHandlerCustomizer + VirtualThreadExecutor
+
+// Проверка имени потока в логах:
+Thread.ofVirtual().name("order-proc").start(() -&gt; {
+    log.info("Running in: {}", Thread.currentThread());
+    // → VirtualThread[#42,order-proc]/runnable@ForkJoinPool...
+});
+  </code></pre>
+  <div class="cards" style="margin-top:12px;">
+    <div class="card green">
+      <h4>Зачем именовать?</h4>
+      <p>Читаемые stack traces и thread dumps. Без имени: VirtualThread[#42]/runnable</p>
+    </div>
+    <div class="card cyan">
+      <h4>daemon = true всегда</h4>
+      <p>VT не удерживают JVM от завершения. Используйте join() или ExecutorService.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 12 — §5 PINNING DIAGRAM
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§5 — Pinning: виртуальный поток застрял</h2>
+  <svg viewBox="0 0 860 280" width="100%" style="max-height:270px;">
+    <!-- LEFT: Normal unmount -->
+    <rect x="10"  y="10" width="400" height="260" rx="10" fill="#50fa7b0a" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="210" y="35" text-anchor="middle" fill="#50fa7b" font-size="14" font-weight="bold">Нормальное поведение</text>
+
+    <!-- Carrier -->
+    <rect x="30"  y="50" width="360" height="40" rx="6" fill="#44475a" stroke="#6272a4" stroke-width="1"/>
+    <text x="210" y="75" text-anchor="middle" fill="#f8f8f2" font-size="12">Carrier Thread (OS)</text>
+
+    <!-- VT mounted -->
+    <rect x="60"  y="110" width="140" height="36" rx="6" fill="#bd93f933" stroke="#bd93f9" stroke-width="1.5"/>
+    <text x="130" y="132" text-anchor="middle" fill="#bd93f9" font-size="12">VT-1 (running)</text>
+    <!-- Arrow down: I/O -->
+    <line x1="130" y1="146" x2="130" y2="175" stroke="#f1fa8c" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="152" y="165" fill="#f1fa8c" font-size="10">I/O call</text>
+    <!-- VT unmounted to heap -->
+    <rect x="60"  y="175" width="140" height="36" rx="6" fill="#8be9fd22" stroke="#8be9fd" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="130" y="197" text-anchor="middle" fill="#8be9fd" font-size="12">VT-1 (heap)</text>
+    <!-- Carrier free → VT-2 -->
+    <line x1="200" y1="128" x2="245" y2="128" stroke="#50fa7b" stroke-width="2" marker-end="url(#arr2)"/>
+    <rect x="245" y="110" width="130" height="36" rx="6" fill="#50fa7b22" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="310" y="132" text-anchor="middle" fill="#50fa7b" font-size="12">VT-2 (carrier free!)</text>
+
+    <text x="210" y="240" text-anchor="middle" fill="#50fa7b" font-size="11">Carrier thread свободен для других VT</text>
+
+    <!-- RIGHT: Pinning -->
+    <rect x="440" y="10" width="410" height="260" rx="10" fill="#ff55550a" stroke="#ff5555" stroke-width="1.5"/>
+    <text x="645" y="35" text-anchor="middle" fill="#ff5555" font-size="14" font-weight="bold">Pinning (проблема!)</text>
+
+    <!-- Carrier -->
+    <rect x="460" y="50" width="370" height="40" rx="6" fill="#44475a" stroke="#6272a4" stroke-width="1"/>
+    <text x="645" y="75" text-anchor="middle" fill="#f8f8f2" font-size="12">Carrier Thread (OS) — ЗАБЛОКИРОВАН</text>
+
+    <!-- synchronized block -->
+    <rect x="470" y="100" width="370" height="80" rx="6" fill="#ff555511" stroke="#ff5555" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="495" y="118" fill="#ffb86c" font-size="11">synchronized (lock) &#123;</text>
+    <!-- VT inside synchronized -->
+    <rect x="500" y="125" width="140" height="36" rx="6" fill="#ff555533" stroke="#ff5555" stroke-width="2"/>
+    <text x="570" y="147" text-anchor="middle" fill="#ff5555" font-size="12">VT-1 (PINNED)</text>
+    <!-- Arrow: blocked -->
+    <line x1="640" y1="143" x2="720" y2="143" stroke="#ff5555" stroke-width="2"/>
+    <line x1="720" y1="120" x2="720" y2="165" stroke="#ff5555" stroke-width="3"/>
+    <text x="730" y="143" fill="#ff5555" font-size="11">BLOCKED</text>
+    <text x="650" y="175" fill="#ffb86c" font-size="11">&#125; // конец synchronized</text>
+
+    <text x="645" y="215" text-anchor="middle" fill="#ff5555" font-size="11">Carrier не может взять другой VT!</text>
+    <text x="645" y="232" text-anchor="middle" fill="#ff5555" font-size="11">→ потеря параллелизма</text>
+    <text x="645" y="250" text-anchor="middle" fill="#ffb86c" font-size="10">Решение: ReentrantLock</text>
+  </svg>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 13 — §5 PINNING FIX CODE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§5 — Pinning: диагностика и исправление</h2>
+  <div class="two-col">
+    <div>
+      <p style="color:#ff5555; font-size:0.8em; margin-bottom:4px;">Антипаттерн (вызывает pinning):</p>
+      <pre><code class="language-java" data-trim data-noescape style="font-size:0.75em;">
+// ⚠️ synchronized + blocking = PINNING
+synchronized (this) {
+    // VT пришпилен к carrier!
+    String data = db.query(sql);  // блокирует carrier
+    cache.put(key, data);
+}
+      </code></pre>
+    </div>
+    <div>
+      <p style="color:#50fa7b; font-size:0.8em; margin-bottom:4px;">Решение — ReentrantLock:</p>
+      <pre><code class="language-java" data-trim data-noescape style="font-size:0.75em;">
+// ✅ ReentrantLock: carrier освобождается
+private final ReentrantLock lock =
+    new ReentrantLock();
+
+lock.lock();
+try {
+    String data = db.query(sql); // OK!
+    cache.put(key, data);
+} finally {
+    lock.unlock();
+}
+      </code></pre>
+    </div>
+  </div>
+  <pre><code class="language-bash" data-trim data-noescape style="font-size:0.78em;">
+# Диагностика pinning:
+java -Djdk.tracePinnedThreads=full -jar app.jar
+
+# Вывод при pinning:
+# Thread[#32,ForkJoinPool-1-worker-1,5,CarrierThreads]
+#   java.base/jdk.internal.misc.Unsafe.park(Native Method)
+#   ...
+#   com.example.OrderService.processOrder(OrderService.java:42)  &lt;-- PINNED HERE
+
+# JFR event:
+# jdk.VirtualThreadPinned { duration = 156.7 ms }
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 14 — §6 THREADLOCAL vs SCOPEDVALUE SVG
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§6 — ThreadLocal vs ScopedValue</h2>
+  <svg viewBox="0 0 860 270" width="100%" style="max-height:260px;">
+    <!-- ThreadLocal side -->
+    <rect x="10" y="10" width="400" height="250" rx="10" fill="#ffb86c0a" stroke="#ffb86c" stroke-width="1.5"/>
+    <text x="210" y="35" text-anchor="middle" fill="#ffb86c" font-size="14" font-weight="bold">ThreadLocal</text>
+
+    <!-- Thread box -->
+    <rect x="30" y="50" width="360" height="190" rx="8" fill="#44475a" stroke="#6272a4" stroke-width="1"/>
+    <text x="210" y="72" text-anchor="middle" fill="#f8f8f2" font-size="12">VirtualThread[#1]</text>
+
+    <!-- ThreadLocal map -->
+    <rect x="50" y="82" width="320" height="140" rx="6" fill="#282a36" stroke="#ffb86c" stroke-width="1" stroke-dasharray="4,2"/>
+    <text x="210" y="100" text-anchor="middle" fill="#ffb86c" font-size="11">ThreadLocalMap (per-thread)</text>
+    <rect x="70"  y="108" width="130" height="24" rx="4" fill="#ffb86c22" stroke="#ffb86c" stroke-width="1"/>
+    <text x="135" y="124" text-anchor="middle" fill="#ffb86c" font-size="10">requestId = "abc"</text>
+    <rect x="210" y="108" width="140" height="24" rx="4" fill="#ffb86c22" stroke="#ffb86c" stroke-width="1"/>
+    <text x="280" y="124" text-anchor="middle" fill="#ffb86c" font-size="10">userId = 42</text>
+    <rect x="70"  y="140" width="130" height="24" rx="4" fill="#ffb86c22" stroke="#ffb86c" stroke-width="1"/>
+    <text x="135" y="156" text-anchor="middle" fill="#ffb86c" font-size="10">locale = "ru"</text>
+    <rect x="210" y="140" width="140" height="24" rx="4" fill="#ff555522" stroke="#ff5555" stroke-width="1"/>
+    <text x="280" y="156" text-anchor="middle" fill="#ff5555" font-size="10">⚠ mutable! leaks!</text>
+    <text x="210" y="210" text-anchor="middle" fill="#ff5555" font-size="10">Миллион VT = миллион ThreadLocalMap</text>
+    <text x="210" y="226" text-anchor="middle" fill="#ff5555" font-size="10">→ GC pressure, memory leaks</text>
+
+    <!-- ScopedValue side -->
+    <rect x="440" y="10" width="410" height="250" rx="10" fill="#50fa7b0a" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="645" y="35" text-anchor="middle" fill="#50fa7b" font-size="14" font-weight="bold">ScopedValue (Java 21)</text>
+
+    <!-- Scope tree -->
+    <rect x="560" y="50" width="170" height="36" rx="6" fill="#50fa7b22" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="645" y="73" text-anchor="middle" fill="#50fa7b" font-size="12">Parent Scope</text>
+    <text x="645" y="86" text-anchor="middle" fill="#50fa7b" font-size="10">REQUEST_ID = "abc"</text>
+
+    <line x1="590" y1="86" x2="530" y2="130" stroke="#50fa7b" stroke-width="1.5"/>
+    <line x1="700" y1="86" x2="760" y2="130" stroke="#50fa7b" stroke-width="1.5"/>
+
+    <rect x="460" y="130" width="130" height="36" rx="6" fill="#50fa7b22" stroke="#50fa7b" stroke-width="1"/>
+    <text x="525" y="153" text-anchor="middle" fill="#50fa7b" font-size="11">Child VT-1</text>
+    <text x="525" y="165" text-anchor="middle" fill="#50fa7b" font-size="9">reads "abc" ✓</text>
+
+    <rect x="710" y="130" width="130" height="36" rx="6" fill="#50fa7b22" stroke="#50fa7b" stroke-width="1"/>
+    <text x="775" y="153" text-anchor="middle" fill="#50fa7b" font-size="11">Child VT-2</text>
+    <text x="775" y="165" text-anchor="middle" fill="#50fa7b" font-size="9">reads "abc" ✓</text>
+
+    <text x="645" y="210" text-anchor="middle" fill="#50fa7b" font-size="11">Immutable · Bounded · No leaks</text>
+    <text x="645" y="226" text-anchor="middle" fill="#50fa7b" font-size="11">Автоматически propagates в дочерние VT</text>
+    <text x="645" y="242" text-anchor="middle" fill="#50fa7b" font-size="10">Освобождается при выходе из scope</text>
+  </svg>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 15 — §6 SCOPEDVALUE CODE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§6 — ScopedValue: пример использования</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// Объявление — статическая константа
+static final ScopedValue&lt;String&gt;  REQUEST_ID = ScopedValue.newInstance();
+static final ScopedValue&lt;UserCtx&gt; USER_CTX   = ScopedValue.newInstance();
+
+// Установка значения и запуск кода в scope
+void handleRequest(String reqId, User user) throws Exception {
+    ScopedValue.where(REQUEST_ID, reqId)
+               .where(USER_CTX, new UserCtx(user))
+               .run(() -&gt; {
+                   // Внутри этой лямбды и всех дочерних VT:
+                   processOrder();
+                   logAction();
+               });
+    // После выхода — значения автоматически уничтожены
+}
+
+// Чтение значения (из любого дочернего потока)
+void processOrder() {
+    String reqId = REQUEST_ID.get(); // всегда безопасно внутри scope
+    log.info("[{}] Processing order", reqId);
+}
+
+// ⚠️ Попытка читать вне scope → NoSuchElementException
+// REQUEST_ID.get() // throws if not bound
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 16 — §7 STRUCTURED CONCURRENCY DIAGRAM
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§7 — Structured Concurrency</h2>
+  <svg viewBox="0 0 860 270" width="100%" style="max-height:260px;">
+    <defs>
+      <marker id="arr4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#bd93f9"/>
+      </marker>
+    </defs>
+    <!-- Scope boundary -->
+    <rect x="10" y="10" width="840" height="250" rx="12" fill="#bd93f90a" stroke="#bd93f9" stroke-width="2" stroke-dasharray="8,4"/>
+    <text x="430" y="30" text-anchor="middle" fill="#bd93f9" font-size="12">StructuredTaskScope (область видимости)</text>
+
+    <!-- Parent task -->
+    <rect x="330" y="40" width="200" height="50" rx="8" fill="#bd93f933" stroke="#bd93f9" stroke-width="2"/>
+    <text x="430" y="62" text-anchor="middle" fill="#bd93f9" font-size="14" font-weight="bold">processOrder()</text>
+    <text x="430" y="80" text-anchor="middle" fill="#bd93f9" font-size="11">Родительский VT</text>
+
+    <!-- Lines to children -->
+    <line x1="330" y1="90" x2="165" y2="140" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <line x1="430" y1="90" x2="430" y2="140" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <line x1="530" y1="90" x2="695" y2="140" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+    <!-- Child tasks -->
+    <rect x="60"  y="140" width="210" height="55" rx="8" fill="#50fa7b22" stroke="#50fa7b" stroke-width="1.5"/>
+    <text x="165" y="163" text-anchor="middle" fill="#50fa7b" font-size="12" font-weight="bold">checkInventory()</text>
+    <text x="165" y="180" text-anchor="middle" fill="#50fa7b" font-size="10">~50ms · VT fork #1</text>
+
+    <rect x="325" y="140" width="210" height="55" rx="8" fill="#8be9fd22" stroke="#8be9fd" stroke-width="1.5"/>
+    <text x="430" y="163" text-anchor="middle" fill="#8be9fd" font-size="12" font-weight="bold">checkCredit()</text>
+    <text x="430" y="180" text-anchor="middle" fill="#8be9fd" font-size="10">~80ms · VT fork #2</text>
+
+    <rect x="590" y="140" width="210" height="55" rx="8" fill="#ffb86c22" stroke="#ffb86c" stroke-width="1.5"/>
+    <text x="695" y="163" text-anchor="middle" fill="#ffb86c" font-size="12" font-weight="bold">getExchangeRate()</text>
+    <text x="695" y="180" text-anchor="middle" fill="#ffb86c" font-size="10">~30ms · VT fork #3</text>
+
+    <!-- Join point -->
+    <line x1="165" y1="195" x2="330" y2="228" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <line x1="430" y1="195" x2="430" y2="228" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <line x1="695" y1="195" x2="530" y2="228" stroke="#bd93f9" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+    <rect x="270" y="228" width="320" height="28" rx="6" fill="#bd93f933" stroke="#bd93f9" stroke-width="1.5"/>
+    <text x="430" y="247" text-anchor="middle" fill="#bd93f9" font-size="12">scope.join() → все завершены за ~80ms</text>
+  </svg>
+  <div class="cards" style="margin-top:10px;">
+    <div class="card">
+      <h4>ShutdownOnFailure</h4>
+      <p>Первый упавший → отменяет всех. join().throwIfFailed()</p>
+    </div>
+    <div class="card green">
+      <h4>ShutdownOnSuccess</h4>
+      <p>Первый успешный → отменяет остальных. Race pattern.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 17 — §7 SC CODE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§7 — Structured Concurrency: код</h2>
+  <pre><code class="language-java" data-trim data-noescape>
+// ShutdownOnFailure: все или никто
+AggregatedResult processOrder(Order order)
+        throws InterruptedException, ExecutionException {
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        // fork() запускает каждую задачу в отдельном VT
+        var inventory = scope.fork(() -&gt; checkInventory(order));
+        var credit    = scope.fork(() -&gt; checkCredit(order));
+        var rate      = scope.fork(() -&gt; getExchangeRate(order.currency()));
+
+        scope.join()           // ждём завершения всех (или первой ошибки)
+             .throwIfFailed(); // пробрасываем исключение если было
+
+        // Здесь все задачи успешно завершились
+        return new AggregatedResult(
+            inventory.get(), credit.get(), rate.get());
+    } // auto-close: отменяет незавершённые задачи
+}
+
+// ShutdownOnSuccess: race — берём первый ответ
+String fetchFromAnyReplica(List&lt;String&gt; replicas)
+        throws InterruptedException, ExecutionException {
+    try (var scope = new StructuredTaskScope.ShutdownOnSuccess&lt;String&gt;()) {
+        replicas.forEach(r -&gt; scope.fork(() -&gt; httpGet(r)));
+        scope.join();
+        return scope.result(); // первый успешный ответ
+    }
+}
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 18 — §8 BLOCKING vs NON-BLOCKING SVG
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§8 — Blocking IO: Platform vs Virtual Threads</h2>
+  <svg viewBox="0 0 860 260" width="100%" style="max-height:250px;">
+    <!-- Headers -->
+    <text x="10"  y="20" fill="#6272a4" font-size="12" font-weight="bold">Время →</text>
+    <text x="10"  y="55" fill="#ff5555" font-size="11">Platform Threads</text>
+    <text x="10"  y="130" fill="#bd93f9" font-size="11">Virtual Threads</text>
+    <text x="10"  y="205" fill="#50fa7b" font-size="11">Reactive</text>
+
+    <!-- Time axis labels -->
+    <text x="200" y="245" text-anchor="middle" fill="#6272a4" font-size="10">0ms</text>
+    <text x="400" y="245" text-anchor="middle" fill="#6272a4" font-size="10">100ms</text>
+    <text x="600" y="245" text-anchor="middle" fill="#6272a4" font-size="10">200ms</text>
+    <text x="800" y="245" text-anchor="middle" fill="#6272a4" font-size="10">300ms</text>
+    <line x1="200" y1="230" x2="820" y2="230" stroke="#44475a" stroke-width="1"/>
+
+    <!-- Platform threads: blocked (red = blocked, gray = waiting) -->
+    <!-- Thread 1 -->
+    <rect x="200" y="30" width="200" height="18" rx="3" fill="#ff5555"/>
+    <rect x="400" y="30" width="200" height="18" rx="3" fill="#44475a"/>
+    <text x="202" y="43" fill="white" font-size="9">PT-1: working</text>
+    <text x="402" y="43" fill="#6272a4" font-size="9">PT-1: BLOCKED (waiting I/O)</text>
+    <!-- Thread 2 -->
+    <rect x="200" y="52" width="60"  height="18" rx="3" fill="#ff5555"/>
+    <rect x="260" y="52" width="340" height="18" rx="3" fill="#44475a"/>
+    <text x="202" y="65" fill="white" font-size="9">PT-2</text>
+    <text x="262" y="65" fill="#6272a4" font-size="9">PT-2: BLOCKED</text>
+    <!-- Thread 3 -->
+    <rect x="200" y="74" width="80"  height="18" rx="3" fill="#ff5555"/>
+    <rect x="280" y="74" width="320" height="18" rx="3" fill="#44475a"/>
+    <text x="202" y="87" fill="white" font-size="9">PT-3</text>
+    <text x="282" y="87" fill="#6272a4" font-size="9">PT-3: BLOCKED (OS thread idle)</text>
+
+    <!-- Virtual threads: carrier reused -->
+    <text x="10" y="115" fill="#6272a4" font-size="9">Carrier-1:</text>
+    <rect x="200" y="105" width="60"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="280" y="105" width="50"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="350" y="105" width="70"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="440" y="105" width="60"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="520" y="105" width="80"  height="18" rx="3" fill="#bd93f9"/>
+    <text x="202" y="118" fill="white" font-size="8">VT-1</text>
+    <text x="282" y="118" fill="white" font-size="8">VT-4</text>
+    <text x="352" y="118" fill="white" font-size="8">VT-2</text>
+    <text x="442" y="118" fill="white" font-size="8">VT-7</text>
+    <text x="522" y="118" fill="white" font-size="8">VT-3</text>
+    <!-- gaps = carrier free -->
+    <text x="265" y="118" fill="#44475a" font-size="8">·</text>
+    <text x="335" y="118" fill="#44475a" font-size="8">·</text>
+    <text x="430" y="118" fill="#44475a" font-size="8">·</text>
+    <text x="510" y="118" fill="#44475a" font-size="8">·</text>
+
+    <text x="10" y="140" fill="#6272a4" font-size="9">Carrier-2:</text>
+    <rect x="200" y="130" width="40"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="260" y="130" width="60"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="340" y="130" width="55"  height="18" rx="3" fill="#bd93f9"/>
+    <rect x="420" y="130" width="80"  height="18" rx="3" fill="#bd93f9"/>
+    <text x="202" y="143" fill="white" font-size="8">VT-5</text>
+    <text x="262" y="143" fill="white" font-size="8">VT-8</text>
+    <text x="342" y="143" fill="white" font-size="8">VT-6</text>
+    <text x="422" y="143" fill="white" font-size="8">VT-9</text>
+
+    <!-- Reactive: callbacks -->
+    <text x="10" y="190" fill="#6272a4" font-size="9">Thread-1:</text>
+    <rect x="200" y="180" width="20" height="18" rx="3" fill="#50fa7b"/>
+    <rect x="300" y="180" width="20" height="18" rx="3" fill="#50fa7b"/>
+    <rect x="400" y="180" width="20" height="18" rx="3" fill="#50fa7b"/>
+    <rect x="500" y="180" width="20" height="18" rx="3" fill="#50fa7b"/>
+    <text x="202" y="193" fill="white" font-size="7">cb</text>
+    <text x="302" y="193" fill="white" font-size="7">cb</text>
+    <text x="402" y="193" fill="white" font-size="7">cb</text>
+    <text x="502" y="193" fill="white" font-size="7">cb</text>
+    <text x="620" y="193" fill="#50fa7b" font-size="10">Хорошая утилизация, но сложный код</text>
+  </svg>
+  <div class="note-box" style="margin-top:6px; font-size:0.78em;">
+    Virtual Threads: такая же утилизация CPU как Reactive, но с простым синхронным кодом.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 19 — §8 BENCHMARK CHART
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§8 — Benchmark: пропускная способность</h2>
+  <svg viewBox="0 0 860 280" width="100%" style="max-height:270px;">
+    <!-- Y axis -->
+    <line x1="100" y1="20" x2="100" y2="230" stroke="#6272a4" stroke-width="2"/>
+    <!-- X axis -->
+    <line x1="100" y1="230" x2="820" y2="230" stroke="#6272a4" stroke-width="2"/>
+
+    <!-- Y labels -->
+    <text x="90" y="230" text-anchor="end" fill="#6272a4" font-size="11">0</text>
+    <text x="90" y="180" text-anchor="end" fill="#6272a4" font-size="11">20K</text>
+    <text x="90" y="130" text-anchor="end" fill="#6272a4" font-size="11">40K</text>
+    <text x="90" y="80"  text-anchor="end" fill="#6272a4" font-size="11">60K</text>
+    <text x="90" y="30"  text-anchor="end" fill="#6272a4" font-size="11">80K</text>
+    <!-- Grid lines -->
+    <line x1="100" y1="180" x2="820" y2="180" stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+    <line x1="100" y1="130" x2="820" y2="130" stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+    <line x1="100" y1="80"  x2="820" y2="80"  stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+    <line x1="100" y1="30"  x2="820" y2="30"  stroke="#44475a" stroke-width="1" stroke-dasharray="4,4"/>
+
+    <!-- Group 1: I/O-bound (400ms latency simulation) -->
+    <text x="260" y="255" text-anchor="middle" fill="#f8f8f2" font-size="11">I/O-bound (400ms)</text>
+    <!-- PT bar: ~8K RPS -->
+    <rect x="140" y="180" width="70" height="50" rx="4" fill="#ff5555"/>
+    <text x="175" y="198" text-anchor="middle" fill="white" font-size="10" font-weight="bold">~8K</text>
+    <text x="175" y="245" text-anchor="middle" fill="#ff5555" font-size="10">PT(200)</text>
+    <!-- VT bar: ~75K RPS -->
+    <rect x="225" y="32" width="70" height="198" rx="4" fill="#bd93f9"/>
+    <text x="260" y="50"  text-anchor="middle" fill="white" font-size="10" font-weight="bold">~75K</text>
+    <text x="260" y="245" text-anchor="middle" fill="#bd93f9" font-size="10">VT</text>
+    <!-- Reactive bar: ~70K RPS -->
+    <rect x="310" y="45" width="70" height="185" rx="4" fill="#50fa7b"/>
+    <text x="345" y="63"  text-anchor="middle" fill="#282a36" font-size="10" font-weight="bold">~70K</text>
+    <text x="345" y="245" text-anchor="middle" fill="#50fa7b" font-size="10">Reactive</text>
+
+    <!-- Group 2: CPU-bound -->
+    <text x="560" y="255" text-anchor="middle" fill="#f8f8f2" font-size="11">CPU-bound</text>
+    <!-- PT bar -->
+    <rect x="460" y="90" width="70" height="140" rx="4" fill="#ff5555"/>
+    <text x="495" y="108" text-anchor="middle" fill="white" font-size="10" font-weight="bold">~50K</text>
+    <text x="495" y="245" text-anchor="middle" fill="#ff5555" font-size="10">PT</text>
+    <!-- VT bar (same as PT for CPU) -->
+    <rect x="545" y="88" width="70" height="142" rx="4" fill="#bd93f9"/>
+    <text x="580" y="106" text-anchor="middle" fill="white" font-size="10" font-weight="bold">~51K</text>
+    <text x="580" y="245" text-anchor="middle" fill="#bd93f9" font-size="10">VT</text>
+    <!-- Note: no benefit -->
+    <text x="560" y="80" text-anchor="middle" fill="#f1fa8c" font-size="10">≈ одинаково</text>
+
+    <!-- Y axis title -->
+    <text x="50" y="130" fill="#6272a4" font-size="11" transform="rotate(-90, 50, 130)">Throughput (RPS)</text>
+  </svg>
+  <div class="note-box" style="margin-top:6px; font-size:0.78em;">
+    VT дают огромный прирост только для I/O-bound задач. CPU-bound: используйте ForkJoinPool/parallelStream.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 20 — §8 WHEN TO USE
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§8 — Когда применять Virtual Threads?</h2>
+  <div class="cards">
+    <div class="card green">
+      <h4>Идеально подходит</h4>
+      <ul>
+        <li>HTTP-запросы к внешним API</li>
+        <li>JDBC / database queries</li>
+        <li>File I/O операции</li>
+        <li>gRPC / message queue consumers</li>
+        <li>Высококонкурентные серверы</li>
+      </ul>
+      <p style="color:#50fa7b; margin-top:8px;">→ I/O-bound workloads</p>
+    </div>
+    <div class="card red">
+      <h4>Не поможет / вредит</h4>
+      <ul>
+        <li>Интенсивные вычисления (ML, crypto)</li>
+        <li>Тяжёлая обработка изображений/видео</li>
+        <li>Уже используете Reactive + всё ок</li>
+        <li>Код с обильными synchronized блоками</li>
+      </ul>
+      <p style="color:#ff5555; margin-top:8px;">→ CPU-bound workloads</p>
+    </div>
+    <div class="card cyan">
+      <h4>Spring Boot 3.2+</h4>
+      <ul>
+        <li><code>spring.threads.virtual.enabled=true</code></li>
+        <li>Tomcat/Jetty автоматически используют VT</li>
+        <li>@Async методы → VT</li>
+        <li>Нет изменений в бизнес-коде</li>
+      </ul>
+      <p style="color:#8be9fd; margin-top:8px;">→ Одна строка конфига!</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 21 — §9 MIGRATION CHECKLIST
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§9 — Чеклист миграции</h2>
+  <ul class="checklist">
+    <li>
+      <span class="chk">✓</span>
+      <span>Заменить <code>Executors.newFixedThreadPool(N)</code> → <code>Executors.newVirtualThreadPerTaskExecutor()</code></span>
+    </li>
+    <li>
+      <span class="chk">✓</span>
+      <span>Найти все <code>synchronized</code> + блокирующий вызов внутри → заменить на <code>ReentrantLock</code></span>
+    </li>
+    <li>
+      <span class="chk">✓</span>
+      <span>Оценить использование <code>ThreadLocal</code> — если &gt;1000 потоков, рассмотреть <code>ScopedValue</code></span>
+    </li>
+    <li>
+      <span class="chk">✓</span>
+      <span>Запустить приложение с флагом <code>-Djdk.tracePinnedThreads=full</code> и устранить pinning</span>
+    </li>
+    <li>
+      <span class="chk">✓</span>
+      <span>Провести нагрузочный тест (k6 / Gatling) — убедиться в росте throughput</span>
+    </li>
+    <li>
+      <span class="chk">✓</span>
+      <span>Записать JFR-профиль и проверить на наличие <code>jdk.VirtualThreadPinned</code> events</span>
+    </li>
+    <li>
+      <span class="chk" style="color:#f1fa8c;">!</span>
+      <span>НЕ создавать пул виртуальных потоков — <code>newFixedThreadPool</code> с VT внутри бессмысленен</span>
+    </li>
+    <li>
+      <span class="chk" style="color:#f1fa8c;">!</span>
+      <span>Проверить библиотеки на наличие внутренних <code>synchronized</code> блоков (JDBC-драйверы, Redis-клиенты)</span>
+    </li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 22 — §10 DEBUGGING JFR
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§10 — Отладка: JFR и JVM-флаги</h2>
+  <pre><code class="language-bash" data-trim data-noescape>
+# 1. Включить трассировку pinning при старте
+java -Djdk.tracePinnedThreads=full \
+     -Djdk.virtualThreadScheduler.parallelism=8 \
+     -jar app.jar
+
+# 2. Запись JFR профиля (5 минут)
+java -XX:StartFlightRecording=duration=5m,\
+       filename=vthread-profile.jfr,\
+       settings=profile \
+     -jar app.jar
+
+# 3. Анализ JFR (JDK Mission Control или jfr tool):
+jfr print --events jdk.VirtualThreadPinned vthread-profile.jfr
+jfr print --events jdk.VirtualThreadSubmitFailed vthread-profile.jfr
+
+# 4. Thread dump включает Virtual Threads (Java 21):
+jcmd &lt;PID&gt; Thread.dump_to_file -format=json threads.json
+
+# 5. Полезные JVM флаги:
+# -Djdk.virtualThreadScheduler.parallelism=N   (default: CPU cores)
+# -Djdk.virtualThreadScheduler.maxPoolSize=N   (default: 256)
+# -Djdk.tracePinnedThreads=short|full
+  </code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 23 — §10 STACKTRACE COMPARISON
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>§10 — Стектрейсы: Reactive vs Virtual Threads</h2>
+  <div class="two-col">
+    <div>
+      <p style="color:#ff5555; font-size:0.78em; margin-bottom:4px;">Reactive (нечитаемо):</p>
+      <pre><code class="language-text" data-trim style="font-size:0.62em; max-height:300px;">
+Exception in thread "reactor-http-nio-3"
+reactor.core.Exceptions$ReactiveException
+  at reactor.core.publisher.Mono.block
+  at reactor.netty.http.client...
+  at io.netty.channel.nio...
+  at io.netty.util.concurrent...
+  at java.util.concurrent.FutureTask.run
+  at java.util.concurrent...
+  // 50+ frames of framework internals
+  // Где ваш код?? 🤔
+      </code></pre>
+    </div>
+    <div>
+      <p style="color:#50fa7b; font-size:0.78em; margin-bottom:4px;">Virtual Threads (читаемо):</p>
+      <pre><code class="language-text" data-trim style="font-size:0.62em; max-height:300px;">
+Exception in VirtualThread[#42,req-handler-5]
+java.sql.SQLException: Connection timeout
+  at com.example.OrderService
+      .processOrder(OrderService.java:67)
+  at com.example.OrderController
+      .handlePost(OrderController.java:34)
+  at org.springframework.web...
+  at java.net.http.HttpClient
+      .send(HttpClient.java:...)
+  // Ваш код виден сразу!
+  // Полный, читаемый стек
+      </code></pre>
+    </div>
+  </div>
+  <div class="note-box" style="margin-top:10px;">
+    Это одно из главных преимуществ VT над Reactive: отладка возвращается к привычному линейному коду.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 24 — FINAL ASSIGNMENT
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>Практическое задание: агрегатор заказов</h2>
+  <pre><code class="language-java" data-trim data-noescape style="font-size:0.75em;">
+static final ScopedValue&lt;String&gt; REQUEST_ID = ScopedValue.newInstance();
+
+AggregatedResult processOrder(String requestId, Order order)
+        throws InterruptedException, ExecutionException {
+    return ScopedValue.where(REQUEST_ID, requestId).call(() -&gt; {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            // Параллельно запускаем три задачи:
+            var inventoryTask = scope.fork(() -&gt; checkInventory(order));  // ~50ms
+            var creditTask    = scope.fork(() -&gt; checkCredit(order));     // ~80ms
+            var rateTask      = scope.fork(() -&gt; getExchangeRate(        // ~30ms
+                                    order.currency()));
+            scope.join().throwIfFailed();
+            // Итог: ~80ms (max), не 160ms (sum)!
+            return new AggregatedResult(
+                inventoryTask.get(), creditTask.get(), rateTask.get());
+        }
+    });
+}
+  </code></pre>
+  <div class="cards" style="margin-top:10px;">
+    <div class="card green">
+      <h4>Требования</h4>
+      <ul>
+        <li>StructuredTaskScope.ShutdownOnFailure</li>
+        <li>ScopedValue (не ThreadLocal)</li>
+        <li>ReentrantLock вместо synchronized</li>
+        <li>JFR без VirtualThreadPinned</li>
+      </ul>
+    </div>
+    <div class="card cyan">
+      <h4>Критерии оценки</h4>
+      <ul>
+        <li>Нет pinning events в JFR</li>
+        <li>Время ≈ max(50,80,30) = ~80ms</li>
+        <li>ScopedValue propagates в child VT</li>
+        <li>Корректная обработка ошибок</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 25 — SUMMARY
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <h2>Итоги урока</h2>
+  <div class="summary-grid">
+    <div class="summary-item">
+      <div class="icon">🧵</div>
+      <h4>Virtual Threads</h4>
+      <p>JVM-потоки поверх carrier threads. Стек в heap. Миллионы потоков — без проблем.</p>
+    </div>
+    <div class="summary-item">
+      <div class="icon">⚙️</div>
+      <h4>Mount / Unmount</h4>
+      <p>При I/O — carrier thread освобождается. Continuation сохраняет стек в heap.</p>
+    </div>
+    <div class="summary-item">
+      <div class="icon">⚠️</div>
+      <h4>Pinning</h4>
+      <p>synchronized + I/O = беда. Заменять на ReentrantLock. Диагностика: JFR + tracePinnedThreads.</p>
+    </div>
+    <div class="summary-item">
+      <div class="icon">🔒</div>
+      <h4>ScopedValue</h4>
+      <p>Замена ThreadLocal для миллионов VT. Immutable, bounded, auto-propagated.</p>
+    </div>
+    <div class="summary-item">
+      <div class="icon">🏗️</div>
+      <h4>Structured Concurrency</h4>
+      <p>Дочерние задачи не переживают scope. ShutdownOnFailure / ShutdownOnSuccess.</p>
+    </div>
+    <div class="summary-item">
+      <div class="icon">📈</div>
+      <h4>Когда применять</h4>
+      <p>I/O-bound: огромный прирост. CPU-bound: без изменений. Spring Boot: одна строка.</p>
+    </div>
+  </div>
+  <div class="note-box" style="margin-top:12px; text-align:center; font-size:0.85em;">
+    Virtual Threads = простота синхронного кода + масштабируемость асинхронного подхода
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════
+     SLIDE 26 — Q&A
+     ═══════════════════════════════════════════════════════ -->
+<section>
+  <div style="text-align:center; padding: 30px 0;">
+    <div class="qa-big">❓</div>
+    <h2 style="margin-top: 10px;">Вопросы?</h2>
+    <p style="color:#6272a4; margin-top: 20px;">
+      JEP 444 · JEP 453 · JEP 446<br/>
+      openjdk.org/projects/loom
+    </p>
+    <div style="margin-top: 20px;">
+      <span class="tag">Virtual Threads</span>
+      <span class="tag cyan">Structured Concurrency</span>
+      <span class="tag green">ScopedValue</span>
+      <span class="tag yellow">Project Loom</span>
+    </div>
+  </div>
+</section>
+
+</div><!-- .slides -->
+</div><!-- .reveal -->
+
+<!-- Reveal.js scripts -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/plugin/notes/notes.js"></script>
+
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    progress: true,
+    transition: 'slide',
+    transitionSpeed: 'default',
+    backgroundTransition: 'fade',
+    plugins: [ RevealHighlight, RevealNotes ],
+    highlight: {
+      highlightOnLoad: true
+    }
+  });
+
+  /* ════════════════════════════════════════════════════
+     ANIMATED ARCHITECTURE DIAGRAM — Slide 6 (#slide-arch)
+     ════════════════════════════════════════════════════ */
+  (function() {
+    'use strict';
+
+    // ── State ──
+    var vtList = [];
+    var vtCounter = 0;
+    var animInterval = null;
+    var isRunning = false;
+    var step = 0;
+    var NUM_CARRIERS = 3;
+    var NUM_PT = 4;
+
+    // VT states: 'running' | 'waiting' | 'heap'
+    function makeVT(id) {
+      return { id: id, state: 'waiting', carrier: -1 };
+    }
+
+    function initVTs(count) {
+      vtList = [];
+      vtCounter = 0;
+      for (var i = 0; i < count; i++) {
+        vtCounter++;
+        vtList.push(makeVT(vtCounter));
+      }
+    }
+
+    function getEl(id) {
+      return document.getElementById(id);
+    }
+
+    function setStatus(msg, highlight) {
+      var el = getEl('ada-anim-status');
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'anim-status' + (highlight ? ' highlight' : '');
+    }
+
+    function updateStats() {
+      var running = vtList.filter(function(v){ return v.state === 'running'; }).length;
+      var waiting = vtList.filter(function(v){ return v.state === 'waiting' || v.state === 'heap'; }).length;
+      var total   = vtList.length;
+
+      var elVT = getEl('ada-stat-vt');
+      var elR  = getEl('ada-stat-running');
+      var elW  = getEl('ada-stat-waiting');
+      if (elVT) elVT.textContent = total;
+      if (elR)  elR.textContent  = running;
+      if (elW)  elW.textContent  = waiting;
+    }
+
+    function updatePTSide() {
+      // Animate PT threads based on step parity
+      for (var i = 0; i < NUM_PT; i++) {
+        var el = getEl('ada-pt-' + i);
+        if (!el) continue;
+        var span = el.querySelector('span:last-child');
+        // Alternate busy/idle in a pattern
+        var busy = (step + i) % 3 !== 0;
+        el.className = 'ada-pt-thread ' + (busy ? 'busy' : 'idle');
+        if (span) span.textContent = 'PT-' + (i+1) + ': ' + (busy ? 'busy (blocked)' : 'idle');
+      }
+    }
+
+    function updateCarriers() {
+      for (var c = 0; c < NUM_CARRIERS; c++) {
+        var el = getEl('ada-carrier-' + c);
+        var lb = getEl('ada-cv-' + c);
+        if (!el || !lb) continue;
+        // Find VT assigned to this carrier
+        var mounted = vtList.filter(function(v){ return v.state === 'running' && v.carrier === c; });
+        if (mounted.length > 0) {
+          el.className = 'ada-carrier carrying';
+          lb.textContent = 'VT-' + mounted[0].id;
+        } else {
+          el.className = 'ada-carrier free';
+          lb.textContent = 'free';
+        }
+      }
+    }
+
+    function renderVTPills() {
+      var runEl  = getEl('ada-vt-running');
+      var heapEl = getEl('ada-vt-heap');
+      if (!runEl || !heapEl) return;
+
+      runEl.innerHTML  = '';
+      heapEl.innerHTML = '';
+
+      vtList.forEach(function(vt) {
+        var pill = document.createElement('span');
+        pill.className = 'ada-vt-pill';
+        pill.textContent = 'VT-' + vt.id;
+
+        if (vt.state === 'running') {
+          pill.className += ' vt-running';
+          runEl.appendChild(pill);
+        } else {
+          pill.className += ' vt-heap';
+          heapEl.appendChild(pill);
+        }
+      });
+    }
+
+    function simulateStep() {
+      step++;
+
+      // Add new VT occasionally
+      if (step % 4 === 0 && vtList.length < 12) {
+        vtCounter++;
+        vtList.push(makeVT(vtCounter));
+      }
+
+      // Remove old terminated VTs occasionally
+      if (step % 7 === 0 && vtList.length > 6) {
+        var waitingVTs = vtList.filter(function(v){ return v.state !== 'running'; });
+        if (waitingVTs.length > 0) {
+          var removeIdx = vtList.indexOf(waitingVTs[0]);
+          vtList.splice(removeIdx, 1);
+        }
+      }
+
+      // Update carrier assignments
+      // First, free up some carriers
+      vtList.forEach(function(vt) {
+        if (vt.state === 'running' && Math.random() < 0.45) {
+          vt.state = 'heap';
+          vt.carrier = -1;
+        }
+      });
+
+      // Assign waiting VTs to free carriers
+      for (var c = 0; c < NUM_CARRIERS; c++) {
+        var alreadyCarrying = vtList.some(function(v){ return v.state === 'running' && v.carrier === c; });
+        if (!alreadyCarrying) {
+          var waitingVTs = vtList.filter(function(v){ return v.state === 'heap' || v.state === 'waiting'; });
+          if (waitingVTs.length > 0) {
+            var pick = waitingVTs[Math.floor(Math.random() * waitingVTs.length)];
+            pick.state   = 'running';
+            pick.carrier = c;
+          }
+        }
+      }
+
+      // Status messages
+      var messages = [
+        'Carrier threads mount/unmount virtual threads dynamically…',
+        'VT waiting for I/O → unmounted, стек сохранён в heap…',
+        'I/O завершился → VT remounted на свободный carrier…',
+        'N:M mapping: ' + NUM_CARRIERS + ' carriers обслуживают ' + vtList.length + ' virtual threads',
+        'Новые запросы → новые VT создаются мгновенно (<1μs)…',
+        'Platform threads заблокированы; carrier threads — нет!'
+      ];
+      setStatus(messages[step % messages.length], step % 2 === 0);
+
+      updatePTSide();
+      updateCarriers();
+      renderVTPills();
+      updateStats();
+    }
+
+    function startAnimation() {
+      if (isRunning) return;
+      isRunning = true;
+      initVTs(6);
+      step = 0;
+      // Initial render
+      updatePTSide();
+      updateCarriers();
+      renderVTPills();
+      updateStats();
+      setStatus('Анимация запущена…', false);
+      animInterval = setInterval(simulateStep, 1100);
+    }
+
+    function stopAnimation() {
+      if (animInterval) {
+        clearInterval(animInterval);
+        animInterval = null;
+      }
+      isRunning = false;
+    }
+
+    // Hook into Reveal events
+    Reveal.on('slidechanged', function(event) {
+      var slide = event.currentSlide;
+      if (slide && slide.id === 'slide-arch') {
+        startAnimation();
+      } else {
+        stopAnimation();
+      }
+    });
+
+    // Also handle if presentation starts on this slide
+    Reveal.on('ready', function() {
+      var currentSlide = Reveal.getCurrentSlide();
+      if (currentSlide && currentSlide.id === 'slide-arch') {
+        startAnimation();
+      }
+    });
+
+  })();
+</script>
+</body>
+</html>
